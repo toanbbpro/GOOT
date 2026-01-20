@@ -13,5 +13,8 @@ Next build:
 - English support
 - Donate button
 
+Download:
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/toanbbpro/GOOT)](https://github.com/toanbbpro/GOOT/releases)
+
 Installation:
 No need, click and run.
