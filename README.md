@@ -8,3 +8,10 @@ Feature:
 - Auto shutdown PC when on time
 - Auto shutdown PC when app open
 - Password protect for schedule cancel
+
+Next build:
+- English support
+- Donate button
+
+Installation:
+No need, click and run.
