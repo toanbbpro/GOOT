@@ -12,6 +12,7 @@ Feature:
 Next build:
 - English support
 - Donate button
+- Minimize to tray
 
 Download:
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/toanbbpro/GOOT)](https://github.com/toanbbpro/GOOT/releases)
