@@ -9,6 +9,8 @@ Feature:
 - Auto shutdown PC when on time
 - Auto shutdown PC when app open
 - Password protect for schedule cancel
+- English/Vietnamese support
+- Minimize to tray system
 
 Next build:
 - Remote control from Telegram Bot
