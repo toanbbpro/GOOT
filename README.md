@@ -1,5 +1,5 @@
 # GOOT - Get Off On Time
-The Winform app to auto shutdown PC in time.
+Windows app to auto shutdown PC in time.
 
 <img width="486" height="323" alt="image" src="https://github.com/user-attachments/assets/eb62d0a4-08fa-482c-935a-35d700ef8aad" />
 
