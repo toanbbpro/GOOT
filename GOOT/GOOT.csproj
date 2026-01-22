@@ -9,6 +9,15 @@
     <ApplicationIcon>time-4-128.ico</ApplicationIcon>
     <Title>GOOT - Get Off On Time</Title>
     <Copyright>ToanBB</Copyright>
+	<Version>1.2.2.0</Version>
+	<AssemblyVersion>1.2.2.0</AssemblyVersion>
+	<FileVersion>1.2.2.0</FileVersion>
+	<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+	<Description>GOOT</Description>
+	<PackageProjectUrl></PackageProjectUrl>
+	<PackageIcon>time-4-128.ico</PackageIcon>
+	<ApplicationManifest>app.manifest</ApplicationManifest>
+	<RepositoryUrl>https://github.com/toanbbpro/GOOT</RepositoryUrl>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -22,6 +31,13 @@
   <ItemGroup>
     <Content Include="bin\Debug\icon.ico" />
     <Content Include="time-4-128.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\..\..\Desktop\time-4-128.ico">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
 
   <ItemGroup>

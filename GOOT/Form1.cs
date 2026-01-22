@@ -7,33 +7,34 @@ namespace GOOT
 {
     public partial class Form1 : Form
     {
-        // --- CÁC CONTROL GIAO DIỆN ---
+        // --- BIẾN GIAO DIỆN ---
         private TabControl tabControl;
         private TabPage tabCountdown, tabTime, tabProcess, tabAbout;
+        private Button btnLangFlag;
 
-        // Tab 1: Đếm ngược (Thêm giây)
+        // Phần bảo mật
+        private Button btnToggleSecurity;
+        private GroupBox grpSecurity;
+        private TextBox txtPassword;
+        private CheckBox chkPassword;
+        private Button btnCancel;
+
+        private StatusStrip statusStrip;
+        private ToolStripStatusLabel lblStatusLeft;
+        private ToolStripStatusLabel lblStatusRight;
+
         private NumericUpDown numHoursCD, numMinutesCD, numSecondsCD;
-        private Button btnStartCountdown;
-
-        // Tab 2: Chọn giờ (Thêm giây)
         private NumericUpDown numHoursTime, numMinutesTime, numSecondsTime;
-        private Button btnStartTime;
-        private Label lblCurrentTime;
 
-        // Tab 3: Chặn App
+        // Tab Chặn App
+        private Label lblProcessHint;
         private TextBox txtProcessName;
-        private Button btnStartProcess;
+        private Button btnStartCountdown, btnStartTime, btnStartProcess, btnDonate;
 
-        // Tab 4: Giới thiệu
+        private Label lblAppInfo;
         private LinkLabel lnkAuthor;
 
-        // Common Controls
-        private CheckBox chkPassword;
-        private TextBox txtPassword;
-        private Label lblStatus;
-        private Button btnCancel;
         private NotifyIcon notifyIcon;
-
         private System.Windows.Forms.Timer mainTimer;
         private System.Windows.Forms.Timer clockTimer;
 
@@ -42,316 +43,318 @@ namespace GOOT
         private string _targetProcessName = "";
         private int _mode = 0;
         private bool _isRunning = false;
+        private bool _isEnglish = false;
+
+        // Kích thước Form
+        private readonly Size _compactSize = new Size(500, 330);
+        private readonly Size _expandedSize = new Size(500, 480);
 
         public Form1()
         {
-            // Cấu hình Form chính
-            this.Text = "GOOT - Get Off On Time";
-            // Yêu cầu 4: Cửa sổ to hơn về chiều ngang (400 -> 520)
-            this.Size = new Size(520, 480);
+            this.Text = $"GOOT - Get Off On Time (v{AppVersionShort})";
+            this.Size = _compactSize;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
             this.StartPosition = FormStartPosition.CenterScreen;
 
-            // --- YÊU CẦU 1: NHÚNG ICON ---
-            // Code này lấy icon trực tiếp từ Resource bạn đã Add ở Phần 1
-            // Nếu bạn chưa Add Resource tên là 'icon', dòng dưới sẽ báo lỗi đỏ.
-            try
-            {
-                this.Icon = Properties.Resources.icon;
-            }
-            catch
-            {
-                // Nếu quên add resource thì dùng tạm icon mặc định để không lỗi code
-                this.Icon = SystemIcons.Application;
-            }
+            try { this.Icon = Properties.Resources.icon; } catch { this.Icon = SystemIcons.Application; }
 
             InitializeUI();
             InitializeLogic();
+            UpdateLanguage();
         }
 
         private void InitializeUI()
         {
-            Font mainFont = new Font("Segoe UI", 10F, FontStyle.Regular);
-            Font boldFont = new Font("Segoe UI", 10F, FontStyle.Bold);
-            Font bigFont = new Font("Segoe UI", 14F, FontStyle.Bold);
+            Font mainFont = new Font("Segoe UI", 9F);
+            Font boldFont = new Font("Segoe UI", 9F, FontStyle.Bold);
 
-            // TẠO TAB CONTROL
-            tabControl = new TabControl { Dock = DockStyle.Top, Height = 240, Font = mainFont };
+            // 1. THANH TAB
+            tabControl = new TabControl { Dock = DockStyle.Top, Height = 220, Font = mainFont };
+            tabCountdown = new TabPage { BackColor = Color.White };
+            tabTime = new TabPage { BackColor = Color.White };
+            tabProcess = new TabPage { BackColor = Color.White };
+            tabAbout = new TabPage { BackColor = Color.White };
 
-            // =========================================================
-            // TAB 1: Đếm ngược (Cập nhật thêm giây)
-            // =========================================================
-            tabCountdown = new TabPage("⏳ Đếm ngược");
-            tabCountdown.BackColor = Color.White;
+            // --- TAB 1: ĐẾM NGƯỢC ---
+            int startX = 50, gap = 110;
+            numHoursCD = new NumericUpDown { Location = new Point(startX, 45), Width = 70, Font = new Font("Segoe UI", 14F, FontStyle.Bold), TextAlign = HorizontalAlignment.Center, Maximum = 99 };
+            numMinutesCD = new NumericUpDown { Location = new Point(startX + gap, 45), Width = 70, Font = new Font("Segoe UI", 14F, FontStyle.Bold), TextAlign = HorizontalAlignment.Center, Maximum = 59 };
+            numSecondsCD = new NumericUpDown { Location = new Point(startX + (gap * 2), 45), Width = 70, Font = new Font("Segoe UI", 14F, FontStyle.Bold), TextAlign = HorizontalAlignment.Center, Maximum = 59 };
+            btnStartCountdown = CreateButton("START", Color.Teal, new Point(130, 110));
+            tabCountdown.Controls.AddRange(new Control[] { numHoursCD, numMinutesCD, numSecondsCD, btnStartCountdown });
 
-            // Layout 3 cột: Giờ - Phút - Giây (Căn chỉnh lại tọa độ X cho cân với chiều rộng 520)
-            int startX = 60;
-            int gap = 110; // Khoảng cách giữa các ô
+            // --- TAB 2: CHỌN GIỜ ---
+            numHoursTime = new NumericUpDown { Location = new Point(startX, 45), Width = 70, Font = new Font("Segoe UI", 14F, FontStyle.Bold), TextAlign = HorizontalAlignment.Center, Maximum = 23, Value = DateTime.Now.Hour };
+            numMinutesTime = new NumericUpDown { Location = new Point(startX + gap, 45), Width = 70, Font = new Font("Segoe UI", 14F, FontStyle.Bold), TextAlign = HorizontalAlignment.Center, Maximum = 59, Value = DateTime.Now.Minute };
+            numSecondsTime = new NumericUpDown { Location = new Point(startX + (gap * 2), 45), Width = 70, Font = new Font("Segoe UI", 14F, FontStyle.Bold), TextAlign = HorizontalAlignment.Center, Maximum = 59 };
+            btnStartTime = CreateButton("SET", Color.RoyalBlue, new Point(130, 110));
+            tabTime.Controls.AddRange(new Control[] { numHoursTime, numMinutesTime, numSecondsTime, btnStartTime });
 
-            Label lblH1 = new Label { Text = "Giờ", Location = new Point(startX, 30), AutoSize = true };
-            numHoursCD = new NumericUpDown { Location = new Point(startX, 55), Width = 70, Maximum = 99, Font = bigFont, TextAlign = HorizontalAlignment.Center };
+            // --- TAB 3: TẮT KHI MỞ APP ---
+            lblProcessHint = new Label
+            {
+                Location = new Point(50, 25),
+                AutoSize = true,
+                ForeColor = Color.Gray,
+                Font = new Font("Segoe UI", 9F, FontStyle.Italic)
+            };
+            txtProcessName = new TextBox { Location = new Point(50, 50), Width = 380, Font = new Font("Segoe UI", 12F) };
+            btnStartProcess = CreateButton("MONITOR", Color.DarkOrange, new Point(130, 100));
+            tabProcess.Controls.AddRange(new Control[] { lblProcessHint, txtProcessName, btnStartProcess });
 
-            Label lblM1 = new Label { Text = "Phút", Location = new Point(startX + gap, 30), AutoSize = true };
-            numMinutesCD = new NumericUpDown { Location = new Point(startX + gap, 55), Width = 70, Maximum = 59, Font = bigFont, TextAlign = HorizontalAlignment.Center };
+            // --- TAB 4: GIỚI THIỆU ---
+            lblAppInfo = new Label
+            {
+                Text = "GOOT - Get Off On Time",
+                Location = new Point(0, 30),
+                Size = new Size(500, 50),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = boldFont
+            };
+            lnkAuthor = new LinkLabel
+            {
+                Text = "Tác giả: ToanBB.Pro",
+                Location = new Point(0, 80),
+                Size = new Size(500, 20),
+                TextAlign = ContentAlignment.MiddleCenter,
+                LinkBehavior = LinkBehavior.HoverUnderline
+            };
+            btnDonate = CreateButton("☕ Buy me a coffee", Color.Gold, new Point(130, 120));
+            btnDonate.ForeColor = Color.Black;
+            tabAbout.Controls.AddRange(new Control[] { lblAppInfo, lnkAuthor, btnDonate });
 
-            // Yêu cầu 2: Thêm ô Giây
-            Label lblS1 = new Label { Text = "Giây", Location = new Point(startX + gap * 2, 30), AutoSize = true };
-            numSecondsCD = new NumericUpDown { Location = new Point(startX + gap * 2, 55), Width = 70, Maximum = 59, Font = bigFont, TextAlign = HorizontalAlignment.Center };
+            tabControl.TabPages.AddRange(new TabPage[] { tabCountdown, tabTime, tabProcess, tabAbout });
 
-            btnStartCountdown = CreateModernButton("BẮT ĐẦU ĐẾM NGƯỢC", Color.Teal, new Point(140, 120)); // Căn giữa nút
+            // 2. NÚT LÁ CỜ
+            btnLangFlag = new Button
+            {
+                Size = new Size(36, 22),
+                Location = new Point(445, 0),
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand,
+                BackColor = Color.WhiteSmoke,
+                BackgroundImageLayout = ImageLayout.Zoom
+            };
+            btnLangFlag.FlatAppearance.BorderSize = 0;
 
-            tabCountdown.Controls.AddRange(new Control[] { lblH1, numHoursCD, lblM1, numMinutesCD, lblS1, numSecondsCD, btnStartCountdown });
+            // 3. NÚT ẨN/HIỆN BẢO MẬT
+            btnToggleSecurity = new Button
+            {
+                Text = "Show Security Options",
+                Location = new Point(10, 225),
+                AutoSize = true, // Tự động co giãn theo độ dài chữ
+                AutoSizeMode = AutoSizeMode.GrowAndShrink, // Chỉ lớn bằng nội dung
+                BackColor = Color.WhiteSmoke,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 8F),
+                Cursor = Cursors.Hand,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+            btnToggleSecurity.FlatAppearance.BorderColor = Color.Silver;
 
-            // =========================================================
-            // TAB 2: Chọn giờ (Cập nhật thêm giây)
-            // =========================================================
-            tabTime = new TabPage("⏰ Chọn giờ");
-            tabTime.BackColor = Color.White;
-
-            lblCurrentTime = new Label { Text = "Hiện tại: " + DateTime.Now.ToString("HH:mm:ss"), Location = new Point(0, 15), Size = new Size(500, 20), TextAlign = ContentAlignment.MiddleCenter, ForeColor = Color.Gray };
-
-            Label lblH2 = new Label { Text = "Giờ", Location = new Point(startX, 45), AutoSize = true };
-            numHoursTime = new NumericUpDown { Location = new Point(startX, 70), Width = 70, Maximum = 23, Font = bigFont, TextAlign = HorizontalAlignment.Center, Value = DateTime.Now.Hour };
-
-            Label lblM2 = new Label { Text = "Phút", Location = new Point(startX + gap, 45), AutoSize = true };
-            numMinutesTime = new NumericUpDown { Location = new Point(startX + gap, 70), Width = 70, Maximum = 59, Font = bigFont, TextAlign = HorizontalAlignment.Center, Value = DateTime.Now.Minute };
-
-            // Thêm ô Giây cho tab chọn giờ
-            Label lblS2 = new Label { Text = "Giây", Location = new Point(startX + gap * 2, 45), AutoSize = true };
-            numSecondsTime = new NumericUpDown { Location = new Point(startX + gap * 2, 70), Width = 70, Maximum = 59, Font = bigFont, TextAlign = HorizontalAlignment.Center, Value = 0 };
-
-            btnStartTime = CreateModernButton("HẸN GIỜ TẮT", Color.RoyalBlue, new Point(140, 130));
-
-            tabTime.Controls.AddRange(new Control[] { lblCurrentTime, lblH2, numHoursTime, lblM2, numMinutesTime, lblS2, numSecondsTime, btnStartTime });
-
-            // =========================================================
-            // TAB 3: Chặn App (Yêu cầu 3: Đổi tên tab)
-            // =========================================================
-            tabProcess = new TabPage("🚫 Tắt máy khi mở App");
-            tabProcess.BackColor = Color.White;
-
-            Label lblP = new Label { Text = "Tên ứng dụng (VD: chrome, lol):", Location = new Point(60, 30), AutoSize = true };
-            txtProcessName = new TextBox { Location = new Point(60, 55), Width = 380, Font = new Font("Segoe UI", 12F) }; // Kéo dài textbox
-            Label lblNote = new Label { Text = "Máy sẽ tự tắt ngay lập tức nếu app này được bật lên", Location = new Point(60, 85), ForeColor = Color.Gray, Font = new Font("Segoe UI", 9F) };
-
-            btnStartProcess = CreateModernButton("BẮT ĐẦU THEO DÕI", Color.DarkOrange, new Point(140, 120));
-
-            tabProcess.Controls.AddRange(new Control[] { lblP, txtProcessName, lblNote, btnStartProcess });
-
-            // =========================================================
-            // TAB 4: Giới thiệu
-            // =========================================================
-            tabAbout = new TabPage("ℹ️ Giới thiệu");
-            tabAbout.BackColor = Color.White;
-
-            Label lblAppInfo = new Label { Text = "GOOT - Get Off On Time\nPhiên bản 1.1", Location = new Point(0, 40), Size = new Size(500, 50), TextAlign = ContentAlignment.MiddleCenter, Font = boldFont };
-
-            lnkAuthor = new LinkLabel();
-            lnkAuthor.Text = "Tác giả: ToanBB.Pro\n(Click để ghé thăm Facebook)";
-            lnkAuthor.Location = new Point(0, 90);
-            lnkAuthor.Size = new Size(500, 50);
-            lnkAuthor.TextAlign = ContentAlignment.MiddleCenter;
-            lnkAuthor.Font = new Font("Segoe UI", 11F, FontStyle.Regular);
-            lnkAuthor.LinkBehavior = LinkBehavior.HoverUnderline;
-
-            tabAbout.Controls.AddRange(new Control[] { lblAppInfo, lnkAuthor });
-
-            // Thêm tabs
-            tabControl.TabPages.Add(tabCountdown);
-            tabControl.TabPages.Add(tabTime);
-            tabControl.TabPages.Add(tabProcess);
-            tabControl.TabPages.Add(tabAbout);
-
-            // --- PHẦN DƯỚI: BẢO MẬT & TRẠNG THÁI ---
-            // Tăng chiều ngang GroupBox theo Form
-            GroupBox grpSecurity = new GroupBox { Text = "🛡️ Bảo mật & Trạng thái", Location = new Point(10, 260), Size = new Size(485, 160), Font = mainFont };
-
-            chkPassword = new CheckBox { Text = "Khóa mật khẩu", Location = new Point(50, 30), AutoSize = true };
-            txtPassword = new TextBox { Location = new Point(180, 28), Width = 250, PasswordChar = '•', PlaceholderText = "Nhập mật khẩu..." };
-
-            lblStatus = new Label { Text = "Sẵn sàng", Location = new Point(10, 65), Size = new Size(465, 30), TextAlign = ContentAlignment.MiddleCenter, Font = boldFont, ForeColor = Color.DarkSlateGray };
-
-            btnCancel = new Button { Text = "HỦY HẸN GIỜ", Location = new Point(165, 110), Size = new Size(160, 40), FlatStyle = FlatStyle.Flat, BackColor = Color.IndianRed, ForeColor = Color.White, Font = boldFont, Cursor = Cursors.Hand };
+            // 4. KHU VỰC BẢO MẬT (Mặc định ẩn)
+            grpSecurity = new GroupBox { Text = "Security", Location = new Point(10, 260), Size = new Size(465, 145), Visible = false };
+            chkPassword = new CheckBox { Text = "Password", Location = new Point(20, 30), AutoSize = true };
+            txtPassword = new TextBox { Location = new Point(140, 28), Width = 300, PasswordChar = '•' };
+            btnCancel = new Button { Text = "CANCEL", Location = new Point(130, 75), Size = new Size(200, 45), FlatStyle = FlatStyle.Flat, BackColor = Color.IndianRed, ForeColor = Color.White, Font = boldFont };
             btnCancel.FlatAppearance.BorderSize = 0;
+            grpSecurity.Controls.AddRange(new Control[] { chkPassword, txtPassword, btnCancel });
 
-            grpSecurity.Controls.Add(chkPassword);
-            grpSecurity.Controls.Add(txtPassword);
-            grpSecurity.Controls.Add(lblStatus);
-            grpSecurity.Controls.Add(btnCancel);
+            // 5. STATUS STRIP
+            statusStrip = new StatusStrip();
+            statusStrip.SizingGrip = false; // Tắt biểu tượng kéo giãn góc phải dưới
+            lblStatusLeft = new ToolStripStatusLabel { Text = "Ready", Spring = true, TextAlign = ContentAlignment.MiddleLeft };
+            lblStatusRight = new ToolStripStatusLabel { Text = "00:00:00", BorderSides = ToolStripStatusLabelBorderSides.Left, Padding = new Padding(10, 0, 0, 0) };
+            statusStrip.Items.AddRange(new ToolStripItem[] { lblStatusLeft, lblStatusRight });
 
-            this.Controls.Add(tabControl);
+            this.Controls.Add(btnLangFlag);
+            this.Controls.Add(btnToggleSecurity);
             this.Controls.Add(grpSecurity);
+            this.Controls.Add(tabControl);
+            this.Controls.Add(statusStrip);
+            btnLangFlag.BringToFront();
         }
 
-        private Button CreateModernButton(string text, Color color, Point loc)
-        {
-            Button btn = new Button();
-            btn.Text = text;
-            btn.Location = loc;
-            btn.Size = new Size(220, 40);
-            btn.FlatStyle = FlatStyle.Flat;
-            btn.BackColor = color;
-            btn.ForeColor = Color.White;
-            btn.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
-            btn.Cursor = Cursors.Hand;
-            btn.FlatAppearance.BorderSize = 0;
-            return btn;
-        }
+        private Button CreateButton(string text, Color color, Point loc) =>
+            new Button { Text = text, Location = loc, Size = new Size(220, 40), FlatStyle = FlatStyle.Flat, BackColor = color, ForeColor = Color.White, Font = new Font("Segoe UI", 9F, FontStyle.Bold), Cursor = Cursors.Hand, FlatAppearance = { BorderSize = 0 } };
 
-        // --- PHẦN 2: LOGIC XỬ LÝ (BACKEND) ---
         private void InitializeLogic()
         {
             mainTimer = new System.Windows.Forms.Timer { Interval = 1000 };
             mainTimer.Tick += MainTimer_Tick;
 
-            clockTimer = new System.Windows.Forms.Timer { Interval = 1000 }; // Cập nhật mỗi giây để hiện giây hiện tại
-            clockTimer.Tick += (s, e) => { if (!_isRunning && lblCurrentTime != null) lblCurrentTime.Text = "Hiện tại: " + DateTime.Now.ToString("HH:mm:ss"); };
+            clockTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+            clockTimer.Tick += (s, e) => { lblStatusRight.Text = DateTime.Now.ToString("HH:mm:ss"); };
             clockTimer.Start();
 
-            // === LOGIC TAB 1: Đếm ngược (Cộng thêm giây) ===
-            btnStartCountdown.Click += (s, e) => {
-                if (numHoursCD.Value == 0 && numMinutesCD.Value == 0 && numSecondsCD.Value == 0) return;
+            btnLangFlag.Click += (s, e) => { _isEnglish = !_isEnglish; UpdateLanguage(); };
 
-                _targetTime = DateTime.Now
-                    .AddHours((int)numHoursCD.Value)
-                    .AddMinutes((int)numMinutesCD.Value)
-                    .AddSeconds((int)numSecondsCD.Value);
+            // Logic Ẩn/Hiện Bảo mật khi nhấn Nút
+            btnToggleSecurity.Click += (s, e) =>
+            {
+                bool isShowing = !grpSecurity.Visible;
+                grpSecurity.Visible = isShowing;
 
-                StartSystem(1, $"Tắt lúc: {_targetTime:HH:mm:ss}");
+                this.Size = isShowing ? _expandedSize : _compactSize;
+                UpdateSecurityButtonText();
             };
 
-            // === LOGIC TAB 2: Chọn giờ cụ thể (Cộng thêm giây) ===
-            btnStartTime.Click += (s, e) => {
+            btnStartCountdown.Click += (s, e) =>
+            {
+                _targetTime = DateTime.Now.AddHours((int)numHoursCD.Value).AddMinutes((int)numMinutesCD.Value).AddSeconds((int)numSecondsCD.Value);
+                StartSystem(1, (_isEnglish ? "Shutdown at: " : "Tắt lúc: ") + _targetTime.ToString("HH:mm:ss"));
+            };
+            btnStartTime.Click += (s, e) =>
+            {
                 DateTime now = DateTime.Now;
-                DateTime selected = new DateTime(now.Year, now.Month, now.Day,
-                    (int)numHoursTime.Value,
-                    (int)numMinutesTime.Value,
-                    (int)numSecondsTime.Value);
-
+                DateTime selected = new DateTime(now.Year, now.Month, now.Day, (int)numHoursTime.Value, (int)numMinutesTime.Value, (int)numSecondsTime.Value);
                 if (selected < now) selected = selected.AddDays(1);
-
                 _targetTime = selected;
-                StartSystem(2, $"Tắt lúc: {_targetTime:HH:mm:ss}");
+                StartSystem(2, (_isEnglish ? "Shutdown at: " : "Tắt lúc: ") + _targetTime.ToString("HH:mm:ss"));
             };
-
-            btnStartProcess.Click += (s, e) => {
-                if (string.IsNullOrWhiteSpace(txtProcessName.Text)) { MessageBox.Show("Nhập tên app!"); return; }
+            btnStartProcess.Click += (s, e) =>
+            {
+                if (string.IsNullOrWhiteSpace(txtProcessName.Text)) return;
                 _targetProcessName = txtProcessName.Text.Trim().ToLower().Replace(".exe", "");
-                StartSystem(3, $"Đang canh app: {_targetProcessName}");
+                StartSystem(3, (_isEnglish ? "Watching: " : "Đang canh: ") + _targetProcessName);
             };
-
-            lnkAuthor.Click += (s, e) => {
-                try { Process.Start(new ProcessStartInfo { FileName = "https://www.facebook.com/toanbb.pro/", UseShellExecute = true }); }
-                catch { MessageBox.Show("Không mở được trình duyệt!"); }
-            };
-
             btnCancel.Click += BtnCancel_Click;
+            btnDonate.Click += (s, e) => ShowDonationDialog();
+            lnkAuthor.Click += (s, e) => { try { Process.Start(new ProcessStartInfo { FileName = "https://www.facebook.com/toanbb.pro/", UseShellExecute = true }); } catch { } };
 
-            // System Tray - Sử dụng Icon từ Resource
             notifyIcon = new NotifyIcon { Icon = this.Icon, Text = "GOOT", Visible = false };
-            notifyIcon.MouseDoubleClick += (s, e) => ShowForm();
+            notifyIcon.MouseDoubleClick += (s, e) => { this.Show(); this.WindowState = FormWindowState.Normal; notifyIcon.Visible = false; };
+        }
 
-            ContextMenuStrip menu = new ContextMenuStrip();
-            menu.Items.Add("Mở giao diện", null, (s, e) => ShowForm());
-            menu.Items.Add("Thoát hẳn", null, (s, e) => ExitApp());
-            notifyIcon.ContextMenuStrip = menu;
+        private void UpdateSecurityButtonText()
+        {
+            if (_isEnglish)
+                btnToggleSecurity.Text = grpSecurity.Visible ? "Hide Security Options" : "Show Security Options";
+            else
+                btnToggleSecurity.Text = grpSecurity.Visible ? "Ẩn tùy chọn bảo mật" : "Hiện tùy chọn bảo mật";
+        }
+
+        private void UpdateLanguage()
+        {
+            string ver = Application.ProductVersion.Substring(0, Math.Min(15, Application.ProductVersion.Length));
+            if (_isEnglish)
+            {
+                try { btnLangFlag.BackgroundImage = Properties.Resources.flag_us; } catch { btnLangFlag.Text = "US"; }
+
+                UpdateSecurityButtonText();
+
+                tabCountdown.Text = "Countdown"; tabTime.Text = "Schedule"; tabProcess.Text = "Auto Close"; tabAbout.Text = "About";
+                btnStartCountdown.Text = "START"; btnStartTime.Text = "SET"; btnStartProcess.Text = "MONITOR";
+
+                lblProcessHint.Text = "Enter process name (e.g., chrome, notepad)";
+
+                lblAppInfo.Text = $"GOOT - Get Off On Time\nVersion {ver}";
+                lnkAuthor.Text = "Author: ToanBB.Pro";
+                grpSecurity.Text = "Security Control"; chkPassword.Text = "Require Password";
+                btnCancel.Text = _isRunning ? "STOP NOW" : "CANCEL";
+                if (!_isRunning) lblStatusLeft.Text = "Ready";
+            }
+            else
+            {
+                try { btnLangFlag.BackgroundImage = Properties.Resources.flag_vn; } catch { btnLangFlag.Text = "VN"; }
+
+                UpdateSecurityButtonText();
+
+                tabCountdown.Text = "Đếm ngược"; tabTime.Text = "Chọn giờ"; tabProcess.Text = "Tắt khi mở app"; tabAbout.Text = "Giới thiệu";
+                btnStartCountdown.Text = "BẮT ĐẦU"; btnStartTime.Text = "HẸN GIỜ"; btnStartProcess.Text = "THEO DÕI";
+
+                lblProcessHint.Text = "Tên app cần theo dõi (ví dụ: chrome, notepad)";
+
+                lblAppInfo.Text = $"GOOT - Get Off On Time\nPhiên bản {ver}";
+                lnkAuthor.Text = "Tác giả: ToanBB.Pro";
+                grpSecurity.Text = "Bảo mật"; chkPassword.Text = "Dùng mật khẩu";
+                btnCancel.Text = _isRunning ? "DỪNG NGAY" : "HỦY HẸN GIỜ";
+                if (!_isRunning) lblStatusLeft.Text = "Sẵn sàng";
+            }
+        }
+
+        private string AppVersionShort
+        {
+            get
+            {
+                try
+                {
+                    string rawVersion = Application.ProductVersion.Split('+')[0];
+                    Version v = new Version(rawVersion);
+                    return $"{v.Major}.{v.Minor}";
+                }
+                catch { return "1.1"; }
+            }
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            if (this.WindowState == FormWindowState.Minimized) { this.Hide(); notifyIcon.Visible = true; }
         }
 
         private void StartSystem(int mode, string msg)
         {
-            if (chkPassword.Checked && string.IsNullOrEmpty(txtPassword.Text))
-            {
-                MessageBox.Show("Vui lòng nhập mật khẩu bảo vệ trước khi bắt đầu!");
-                return;
-            }
+            _mode = mode; _isRunning = true;
+            lblStatusLeft.Text = msg; lblStatusLeft.ForeColor = Color.Red;
+            tabControl.Enabled = false; mainTimer.Start();
+            UpdateLanguage();
 
-            _mode = mode;
-            _isRunning = true;
-            lblStatus.Text = msg;
-            lblStatus.ForeColor = Color.Red;
-            ToggleInputs(false);
-            mainTimer.Start();
+            // Tự động mở rộng form và hiện phần bảo mật để người dùng thấy nút Hủy
+            if (!grpSecurity.Visible)
+            {
+                grpSecurity.Visible = true;
+                this.Size = _expandedSize;
+                UpdateSecurityButtonText();
+            }
         }
 
         private void BtnCancel_Click(object sender, EventArgs e)
         {
             if (!_isRunning) return;
-
-            if (chkPassword.Checked)
-            {
-                string pass = Prompt.ShowDialog("Nhập mật khẩu để hủy:", "Bảo mật");
-                if (pass != txtPassword.Text) { MessageBox.Show("Sai mật khẩu!"); return; }
-            }
-            StopSystem();
-        }
-
-        private void StopSystem()
-        {
-            mainTimer.Stop();
-            _isRunning = false;
-            _mode = 0;
-            lblStatus.Text = "Đã hủy hẹn giờ";
-            lblStatus.ForeColor = Color.DarkSlateGray;
-            ToggleInputs(true);
-        }
-
-        private void ToggleInputs(bool enable)
-        {
-            tabControl.Enabled = enable;
-            chkPassword.Enabled = enable;
-            txtPassword.Enabled = enable;
-            btnCancel.Text = enable ? "HỦY HẸN GIỜ" : "DỪNG (Cần Pass)";
+            if (chkPassword.Checked && Prompt.ShowDialog("Pass:", "Verify") != txtPassword.Text) return;
+            mainTimer.Stop(); _isRunning = false;
+            tabControl.Enabled = true; lblStatusLeft.ForeColor = Color.Black;
+            UpdateLanguage();
         }
 
         private void MainTimer_Tick(object sender, EventArgs e)
         {
-            switch (_mode)
+            if (_mode == 3)
             {
-                case 1:
-                case 2:
-                    TimeSpan remain = _targetTime - DateTime.Now;
-                    if (remain.TotalSeconds <= 0) ShutdownNow();
-                    else lblStatus.Text = $"Còn: {remain.Hours:00}:{remain.Minutes:00}:{remain.Seconds:00}";
-                    break;
-                case 3:
-                    if (Process.GetProcessesByName(_targetProcessName).Length > 0) ShutdownNow();
-                    break;
-            }
-        }
-
-        private void ShutdownNow()
-        {
-            mainTimer.Stop();
-            Process.Start(new ProcessStartInfo("shutdown", "/s /f /t 0") { CreateNoWindow = true, UseShellExecute = false });
-        }
-
-        protected override void OnFormClosing(FormClosingEventArgs e)
-        {
-            if (_isRunning && e.CloseReason == CloseReason.UserClosing)
-            {
-                e.Cancel = true;
-                Hide();
-                notifyIcon.Visible = true;
-                notifyIcon.ShowBalloonTip(2000, "GOOT", "Ứng dụng đang chạy ngầm...", ToolTipIcon.Info);
+                if (Process.GetProcessesByName(_targetProcessName).Length > 0) ShutdownNow();
             }
             else
             {
-                base.OnFormClosing(e);
+                TimeSpan remain = _targetTime - DateTime.Now;
+                if (remain.TotalSeconds <= 0) ShutdownNow();
+                else lblStatusLeft.Text = (_isEnglish ? "Remaining: " : "Còn lại: ") + remain.ToString(@"hh\:mm\:ss");
             }
         }
 
-        private void ShowForm() { Show(); WindowState = FormWindowState.Normal; notifyIcon.Visible = false; }
+        private void ShutdownNow() { Process.Start(new ProcessStartInfo("shutdown", "/s /f /t 0") { CreateNoWindow = true, UseShellExecute = false }); }
 
-        private void ExitApp()
+        private void ShowDonationDialog()
         {
-            if (_isRunning && chkPassword.Checked)
+            Form f = new Form { Text = "Donate", Size = new Size(320, 440), StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedToolWindow, BackColor = Color.White };
+            PictureBox pb = new PictureBox { Size = new Size(240, 240), Location = new Point(35, 15), SizeMode = PictureBoxSizeMode.Zoom, BorderStyle = BorderStyle.FixedSingle };
+            try { pb.Image = Properties.Resources.qr; } catch { }
+
+            Label lb = new Label
             {
-                string pass = Prompt.ShowDialog("Nhập mật khẩu để thoát:", "Thoát ứng dụng");
-                if (pass != txtPassword.Text) { MessageBox.Show("Sai mật khẩu!"); return; }
-            }
-            _isRunning = false;
-            Application.Exit();
+                Text = "TP BANK: 03024836402\nContent: Buy coffee",
+                Location = new Point(10, 270),
+                Size = new Size(300, 60),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Font = new Font("Segoe UI", 10F, FontStyle.Bold)
+            };
+
+            Button btn = new Button { Text = "Close", Location = new Point(110, 345), Size = new Size(100, 35) };
+            btn.Click += (s, e) => f.Close();
+
+            f.Controls.AddRange(new Control[] { pb, lb, btn });
+            f.ShowDialog();
         }
     }
 
@@ -359,13 +362,11 @@ namespace GOOT
     {
         public static string ShowDialog(string text, string caption)
         {
-            Form prompt = new Form() { Width = 350, Height = 160, FormBorderStyle = FormBorderStyle.FixedDialog, Text = caption, StartPosition = FormStartPosition.CenterScreen, MinimizeBox = false, MaximizeBox = false };
-            Label textLabel = new Label() { Left = 20, Top = 20, Text = text, AutoSize = true };
-            TextBox textBox = new TextBox() { Left = 20, Top = 50, Width = 300, PasswordChar = '•' };
-            Button confirmation = new Button() { Text = "Xác nhận", Left = 220, Width = 100, Top = 80, DialogResult = DialogResult.OK };
-            prompt.Controls.Add(textBox); prompt.Controls.Add(confirmation); prompt.Controls.Add(textLabel);
-            prompt.AcceptButton = confirmation;
-            return prompt.ShowDialog() == DialogResult.OK ? textBox.Text : "";
+            Form prompt = new Form() { Width = 300, Height = 150, Text = caption, StartPosition = FormStartPosition.CenterScreen, FormBorderStyle = FormBorderStyle.FixedDialog };
+            TextBox t = new TextBox() { Left = 20, Top = 45, Width = 240, PasswordChar = '•' };
+            Button b = new Button() { Text = "OK", Left = 180, Width = 80, Top = 80, DialogResult = DialogResult.OK };
+            prompt.Controls.AddRange(new Control[] { t, b });
+            return prompt.ShowDialog() == DialogResult.OK ? t.Text : "";
         }
     }
 }
