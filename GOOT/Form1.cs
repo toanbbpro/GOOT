@@ -1,6 +1,8 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace GOOT
@@ -9,7 +11,7 @@ namespace GOOT
     {
         // --- BIẾN GIAO DIỆN ---
         private TabControl tabControl;
-        private TabPage tabCountdown, tabTime, tabProcess, tabAbout;
+        private TabPage tabCountdown, tabTime, tabProcess, tabWeekly, tabAbout;
         private Button btnLangFlag;
 
         // Phần bảo mật
@@ -23,16 +25,26 @@ namespace GOOT
         private ToolStripStatusLabel lblStatusLeft;
         private ToolStripStatusLabel lblStatusRight;
 
+        // Các biến nhập liệu thời gian
         private NumericUpDown numHoursCD, numMinutesCD, numSecondsCD;
         private NumericUpDown numHoursTime, numMinutesTime, numSecondsTime;
+
+        // Tab Lịch biểu tuần
+        private CheckedListBox chkListDays;
+        private CheckBox chkSelectAllDays;
+        private NumericUpDown numHoursWeekly, numMinutesWeekly;
+        private Button btnStartWeekly;
 
         // Tab Chặn App
         private Label lblProcessHint;
         private TextBox txtProcessName;
         private Button btnStartCountdown, btnStartTime, btnStartProcess, btnDonate;
 
+        // Tab Giới thiệu
         private Label lblAppInfo;
         private LinkLabel lnkAuthor;
+        private LinkLabel lnkRepo;
+        private CheckBox chkStartWithWindows;
 
         private NotifyIcon notifyIcon;
         private System.Windows.Forms.Timer mainTimer;
@@ -41,17 +53,20 @@ namespace GOOT
         // --- BIẾN LOGIC ---
         private DateTime _targetTime;
         private string _targetProcessName = "";
-        private int _mode = 0;
+        private int _mode = 0; // 0: Idle, 1: Countdown, 2: SetTime, 3: Process, 4: Weekly
         private bool _isRunning = false;
         private bool _isEnglish = false;
 
+        // Key Registry
+        private const string REG_PATH = @"SOFTWARE\GOOT\Settings";
+
         // Kích thước Form
-        private readonly Size _compactSize = new Size(500, 330);
-        private readonly Size _expandedSize = new Size(500, 480);
+        private readonly Size _compactSize = new Size(500, 350);
+        private readonly Size _expandedSize = new Size(500, 500);
 
         public Form1()
         {
-            this.Text = $"GOOT - Get Off On Time (v{AppVersionShort})";
+            this.Text = "GOOT - Get Off On Time (v1.3.2)";
             this.Size = _compactSize;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
@@ -62,108 +77,114 @@ namespace GOOT
             InitializeUI();
             InitializeLogic();
             UpdateLanguage();
+
+            // Tải cấu hình cũ sau khi khởi tạo xong
+            LoadSettings();
         }
 
         private void InitializeUI()
         {
             Font mainFont = new Font("Segoe UI", 9F);
             Font boldFont = new Font("Segoe UI", 9F, FontStyle.Bold);
+            Font bigFont = new Font("Segoe UI", 14F, FontStyle.Bold);
 
             // 1. THANH TAB
-            tabControl = new TabControl { Dock = DockStyle.Top, Height = 220, Font = mainFont };
+            tabControl = new TabControl { Dock = DockStyle.Top, Height = 240, Font = mainFont };
             tabCountdown = new TabPage { BackColor = Color.White };
             tabTime = new TabPage { BackColor = Color.White };
             tabProcess = new TabPage { BackColor = Color.White };
+            tabWeekly = new TabPage { BackColor = Color.White };
             tabAbout = new TabPage { BackColor = Color.White };
 
+            // --- XỬ LÝ SỰ KIỆN CHUYỂN TAB THÔNG MINH (NEW v1.3.2) ---
+            tabControl.Selecting += (s, e) => {
+                if (_isRunning)
+                {
+                    // Cho phép vào Tab About
+                    if (e.TabPage == tabAbout) return;
+
+                    // Cho phép vào Tab đang chạy chức năng hiện tại (để xem, nhưng nội dung sẽ bị disable)
+                    if (_mode == 1 && e.TabPage == tabCountdown) return;
+                    if (_mode == 2 && e.TabPage == tabTime) return;
+                    if (_mode == 3 && e.TabPage == tabProcess) return;
+                    if (_mode == 4 && e.TabPage == tabWeekly) return;
+
+                    // Còn lại thì chặn
+                    e.Cancel = true;
+                    MessageBox.Show(_isEnglish ? "Task is running. Please stop it first." : "Đang chạy tác vụ. Vui lòng hủy trước khi chuyển chức năng!", "GOOT Notification");
+                }
+            };
+
+            // --- TÍNH TOÁN CĂN GIỮA ---
+            int numW = 70;
+            int gap = 20;
+            int startX = 120;
+
             // --- TAB 1: ĐẾM NGƯỢC ---
-            int startX = 50, gap = 110;
-            numHoursCD = new NumericUpDown { Location = new Point(startX, 45), Width = 70, Font = new Font("Segoe UI", 14F, FontStyle.Bold), TextAlign = HorizontalAlignment.Center, Maximum = 99 };
-            numMinutesCD = new NumericUpDown { Location = new Point(startX + gap, 45), Width = 70, Font = new Font("Segoe UI", 14F, FontStyle.Bold), TextAlign = HorizontalAlignment.Center, Maximum = 59 };
-            numSecondsCD = new NumericUpDown { Location = new Point(startX + (gap * 2), 45), Width = 70, Font = new Font("Segoe UI", 14F, FontStyle.Bold), TextAlign = HorizontalAlignment.Center, Maximum = 59 };
+            numHoursCD = new NumericUpDown { Location = new Point(startX, 45), Width = numW, Font = bigFont, TextAlign = HorizontalAlignment.Center };
+            numMinutesCD = new NumericUpDown { Location = new Point(startX + numW + gap, 45), Width = numW, Font = bigFont, TextAlign = HorizontalAlignment.Center };
+            numSecondsCD = new NumericUpDown { Location = new Point(startX + (numW + gap) * 2, 45), Width = numW, Font = bigFont, TextAlign = HorizontalAlignment.Center };
+
             btnStartCountdown = CreateButton("START", Color.Teal, new Point(130, 110));
             tabCountdown.Controls.AddRange(new Control[] { numHoursCD, numMinutesCD, numSecondsCD, btnStartCountdown });
 
             // --- TAB 2: CHỌN GIỜ ---
-            numHoursTime = new NumericUpDown { Location = new Point(startX, 45), Width = 70, Font = new Font("Segoe UI", 14F, FontStyle.Bold), TextAlign = HorizontalAlignment.Center, Maximum = 23, Value = DateTime.Now.Hour };
-            numMinutesTime = new NumericUpDown { Location = new Point(startX + gap, 45), Width = 70, Font = new Font("Segoe UI", 14F, FontStyle.Bold), TextAlign = HorizontalAlignment.Center, Maximum = 59, Value = DateTime.Now.Minute };
-            numSecondsTime = new NumericUpDown { Location = new Point(startX + (gap * 2), 45), Width = 70, Font = new Font("Segoe UI", 14F, FontStyle.Bold), TextAlign = HorizontalAlignment.Center, Maximum = 59 };
+            numHoursTime = new NumericUpDown { Location = new Point(startX, 45), Width = numW, Font = bigFont, TextAlign = HorizontalAlignment.Center, Value = DateTime.Now.Hour };
+            numMinutesTime = new NumericUpDown { Location = new Point(startX + numW + gap, 45), Width = numW, Font = bigFont, TextAlign = HorizontalAlignment.Center, Value = DateTime.Now.Minute };
+            numSecondsTime = new NumericUpDown { Location = new Point(startX + (numW + gap) * 2, 45), Width = numW, Font = bigFont, TextAlign = HorizontalAlignment.Center };
+
             btnStartTime = CreateButton("SET", Color.RoyalBlue, new Point(130, 110));
             tabTime.Controls.AddRange(new Control[] { numHoursTime, numMinutesTime, numSecondsTime, btnStartTime });
 
             // --- TAB 3: TẮT KHI MỞ APP ---
-            lblProcessHint = new Label
-            {
-                Location = new Point(50, 25),
-                AutoSize = true,
-                ForeColor = Color.Gray,
-                Font = new Font("Segoe UI", 9F, FontStyle.Italic)
-            };
+            lblProcessHint = new Label { Location = new Point(50, 25), AutoSize = true, ForeColor = Color.Gray, Font = new Font("Segoe UI", 9F, FontStyle.Italic) };
             txtProcessName = new TextBox { Location = new Point(50, 50), Width = 380, Font = new Font("Segoe UI", 12F) };
             btnStartProcess = CreateButton("MONITOR", Color.DarkOrange, new Point(130, 100));
             tabProcess.Controls.AddRange(new Control[] { lblProcessHint, txtProcessName, btnStartProcess });
 
-            // --- TAB 4: GIỚI THIỆU ---
-            lblAppInfo = new Label
-            {
-                Text = "GOOT - Get Off On Time",
-                Location = new Point(0, 30),
-                Size = new Size(500, 50),
-                TextAlign = ContentAlignment.MiddleCenter,
-                Font = boldFont
-            };
-            lnkAuthor = new LinkLabel
-            {
-                Text = "Tác giả: ToanBB.Pro",
-                Location = new Point(0, 80),
-                Size = new Size(500, 20),
-                TextAlign = ContentAlignment.MiddleCenter,
-                LinkBehavior = LinkBehavior.HoverUnderline
-            };
-            btnDonate = CreateButton("☕ Buy me a coffee", Color.Gold, new Point(130, 120));
+            // --- TAB 4: LỊCH BIỂU TUẦN ---
+            chkListDays = new CheckedListBox { Location = new Point(20, 20), Width = 150, Height = 130, CheckOnClick = true, Font = new Font("Segoe UI", 9F) };
+            chkSelectAllDays = new CheckBox { Text = "Select All", Location = new Point(20, 155), AutoSize = true, Font = new Font("Segoe UI", 8F) };
+
+            numHoursWeekly = new NumericUpDown { Location = new Point(200, 50), Width = 70, Font = bigFont, TextAlign = HorizontalAlignment.Center, Value = 22 };
+            numMinutesWeekly = new NumericUpDown { Location = new Point(290, 50), Width = 70, Font = bigFont, TextAlign = HorizontalAlignment.Center };
+            Label lblColon = new Label { Text = ":", Location = new Point(273, 50), AutoSize = true, Font = bigFont };
+
+            btnStartWeekly = CreateButton("SET SCHEDULE", Color.Purple, new Point(190, 110));
+            btnStartWeekly.Size = new Size(240, 40);
+
+            tabWeekly.Controls.AddRange(new Control[] { chkListDays, chkSelectAllDays, numHoursWeekly, lblColon, numMinutesWeekly, btnStartWeekly });
+
+            // --- TAB 5: GIỚI THIỆU ---
+            lblAppInfo = new Label { Text = "GOOT", Location = new Point(0, 15), Size = new Size(500, 30), TextAlign = ContentAlignment.MiddleCenter, Font = boldFont };
+            lnkRepo = new LinkLabel { Location = new Point(0, 50), Size = new Size(500, 20), TextAlign = ContentAlignment.MiddleCenter, LinkBehavior = LinkBehavior.HoverUnderline };
+            lnkAuthor = new LinkLabel { Text = "Author: ToanBB.Pro", Location = new Point(0, 75), Size = new Size(500, 20), TextAlign = ContentAlignment.MiddleCenter, LinkBehavior = LinkBehavior.HoverUnderline };
+
+            btnDonate = CreateButton("☕ Buy me a coffee", Color.Gold, new Point(130, 115));
             btnDonate.ForeColor = Color.Black;
-            tabAbout.Controls.AddRange(new Control[] { lblAppInfo, lnkAuthor, btnDonate });
 
-            tabControl.TabPages.AddRange(new TabPage[] { tabCountdown, tabTime, tabProcess, tabAbout });
+            chkStartWithWindows = new CheckBox { Text = "Start with Windows", Location = new Point(10, 185), AutoSize = true, Font = new Font("Segoe UI", 9F) };
 
-            // 2. NÚT LÁ CỜ
-            btnLangFlag = new Button
-            {
-                Size = new Size(36, 22),
-                Location = new Point(445, 0),
-                FlatStyle = FlatStyle.Flat,
-                Cursor = Cursors.Hand,
-                BackColor = Color.WhiteSmoke,
-                BackgroundImageLayout = ImageLayout.Zoom
-            };
+            tabAbout.Controls.AddRange(new Control[] { lblAppInfo, lnkRepo, lnkAuthor, btnDonate, chkStartWithWindows });
+
+            tabControl.TabPages.AddRange(new TabPage[] { tabCountdown, tabTime, tabWeekly, tabProcess, tabAbout });
+
+            // CÁC NÚT KHÁC
+            btnLangFlag = new Button { Size = new Size(36, 22), Location = new Point(445, 0), FlatStyle = FlatStyle.Flat, Cursor = Cursors.Hand, BackColor = Color.WhiteSmoke, BackgroundImageLayout = ImageLayout.Zoom };
             btnLangFlag.FlatAppearance.BorderSize = 0;
 
-            // 3. NÚT ẨN/HIỆN BẢO MẬT
-            btnToggleSecurity = new Button
-            {
-                Text = "Show Security Options",
-                Location = new Point(10, 225),
-                AutoSize = true, // Tự động co giãn theo độ dài chữ
-                AutoSizeMode = AutoSizeMode.GrowAndShrink, // Chỉ lớn bằng nội dung
-                BackColor = Color.WhiteSmoke,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 8F),
-                Cursor = Cursors.Hand,
-                TextAlign = ContentAlignment.MiddleCenter
-            };
+            btnToggleSecurity = new Button { Text = "Show Security Options", Location = new Point(10, 245), AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, BackColor = Color.WhiteSmoke, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 8F), Cursor = Cursors.Hand, TextAlign = ContentAlignment.MiddleCenter };
             btnToggleSecurity.FlatAppearance.BorderColor = Color.Silver;
 
-            // 4. KHU VỰC BẢO MẬT (Mặc định ẩn)
-            grpSecurity = new GroupBox { Text = "Security", Location = new Point(10, 260), Size = new Size(465, 145), Visible = false };
+            grpSecurity = new GroupBox { Text = "Security", Location = new Point(10, 280), Size = new Size(465, 145), Visible = false };
             chkPassword = new CheckBox { Text = "Password", Location = new Point(20, 30), AutoSize = true };
             txtPassword = new TextBox { Location = new Point(140, 28), Width = 300, PasswordChar = '•' };
             btnCancel = new Button { Text = "CANCEL", Location = new Point(130, 75), Size = new Size(200, 45), FlatStyle = FlatStyle.Flat, BackColor = Color.IndianRed, ForeColor = Color.White, Font = boldFont };
             btnCancel.FlatAppearance.BorderSize = 0;
             grpSecurity.Controls.AddRange(new Control[] { chkPassword, txtPassword, btnCancel });
 
-            // 5. STATUS STRIP
             statusStrip = new StatusStrip();
-            statusStrip.SizingGrip = false; // Tắt biểu tượng kéo giãn góc phải dưới
+            statusStrip.SizingGrip = false;
             lblStatusLeft = new ToolStripStatusLabel { Text = "Ready", Spring = true, TextAlign = ContentAlignment.MiddleLeft };
             lblStatusRight = new ToolStripStatusLabel { Text = "00:00:00", BorderSides = ToolStripStatusLabelBorderSides.Left, Padding = new Padding(10, 0, 0, 0) };
             statusStrip.Items.AddRange(new ToolStripItem[] { lblStatusLeft, lblStatusRight });
@@ -188,14 +209,26 @@ namespace GOOT
             clockTimer.Tick += (s, e) => { lblStatusRight.Text = DateTime.Now.ToString("HH:mm:ss"); };
             clockTimer.Start();
 
-            btnLangFlag.Click += (s, e) => { _isEnglish = !_isEnglish; UpdateLanguage(); };
+            CheckStartupState();
 
-            // Logic Ẩn/Hiện Bảo mật khi nhấn Nút
+            // Cấu hình tuần hoàn
+            MakeCyclic(numHoursCD, 99); MakeCyclic(numMinutesCD, 59); MakeCyclic(numSecondsCD, 59);
+            MakeCyclic(numHoursTime, 23); MakeCyclic(numMinutesTime, 59); MakeCyclic(numSecondsTime, 59);
+            MakeCyclic(numHoursWeekly, 23); MakeCyclic(numMinutesWeekly, 59);
+
+            chkSelectAllDays.CheckedChanged += (s, e) =>
+            {
+                for (int i = 0; i < chkListDays.Items.Count; i++)
+                    chkListDays.SetItemChecked(i, chkSelectAllDays.Checked);
+            };
+
+            btnLangFlag.Click += (s, e) => { _isEnglish = !_isEnglish; UpdateLanguage(); };
+            chkStartWithWindows.CheckedChanged += (s, e) => SetStartup(chkStartWithWindows.Checked);
+
             btnToggleSecurity.Click += (s, e) =>
             {
                 bool isShowing = !grpSecurity.Visible;
                 grpSecurity.Visible = isShowing;
-
                 this.Size = isShowing ? _expandedSize : _compactSize;
                 UpdateSecurityButtonText();
             };
@@ -205,6 +238,7 @@ namespace GOOT
                 _targetTime = DateTime.Now.AddHours((int)numHoursCD.Value).AddMinutes((int)numMinutesCD.Value).AddSeconds((int)numSecondsCD.Value);
                 StartSystem(1, (_isEnglish ? "Shutdown at: " : "Tắt lúc: ") + _targetTime.ToString("HH:mm:ss"));
             };
+
             btnStartTime.Click += (s, e) =>
             {
                 DateTime now = DateTime.Now;
@@ -213,79 +247,236 @@ namespace GOOT
                 _targetTime = selected;
                 StartSystem(2, (_isEnglish ? "Shutdown at: " : "Tắt lúc: ") + _targetTime.ToString("HH:mm:ss"));
             };
+
             btnStartProcess.Click += (s, e) =>
             {
                 if (string.IsNullOrWhiteSpace(txtProcessName.Text)) return;
                 _targetProcessName = txtProcessName.Text.Trim().ToLower().Replace(".exe", "");
                 StartSystem(3, (_isEnglish ? "Watching: " : "Đang canh: ") + _targetProcessName);
             };
+
+            btnStartWeekly.Click += (s, e) =>
+            {
+                if (chkListDays.CheckedItems.Count == 0)
+                {
+                    MessageBox.Show(_isEnglish ? "Please select at least one day." : "Vui lòng chọn ít nhất một ngày.");
+                    return;
+                }
+
+                DateTime? nextRun = GetNextWeeklyTime((int)numHoursWeekly.Value, (int)numMinutesWeekly.Value);
+                if (nextRun.HasValue)
+                {
+                    _targetTime = nextRun.Value;
+                    // Khi người dùng bấm nút Set, lưu trạng thái Active
+                    SaveSettings(true);
+                    StartSystem(4, (_isEnglish ? "Next run: " : "Lần chạy tới: ") + _targetTime.ToString("dd/MM HH:mm"));
+                }
+            };
+
             btnCancel.Click += BtnCancel_Click;
             btnDonate.Click += (s, e) => ShowDonationDialog();
             lnkAuthor.Click += (s, e) => { try { Process.Start(new ProcessStartInfo { FileName = "https://www.facebook.com/toanbb.pro/", UseShellExecute = true }); } catch { } };
+            lnkRepo.Click += (s, e) => { try { Process.Start(new ProcessStartInfo { FileName = "https://github.com/toanbbpro/GOOT", UseShellExecute = true }); } catch { } };
 
             notifyIcon = new NotifyIcon { Icon = this.Icon, Text = "GOOT", Visible = false };
             notifyIcon.MouseDoubleClick += (s, e) => { this.Show(); this.WindowState = FormWindowState.Normal; notifyIcon.Visible = false; };
         }
 
+        // --- HÀM LƯU / TẢI SETTINGS ---
+        private void SaveSettings(bool isActive)
+        {
+            try
+            {
+                RegistryKey key = Registry.CurrentUser.CreateSubKey(REG_PATH);
+                key.SetValue("WeeklyHour", (int)numHoursWeekly.Value);
+                key.SetValue("WeeklyMinute", (int)numMinutesWeekly.Value);
+
+                string checkedIndices = string.Join(",", chkListDays.CheckedIndices.Cast<int>());
+                key.SetValue("WeeklyDays", checkedIndices);
+
+                if (chkPassword.Checked && !string.IsNullOrEmpty(txtPassword.Text))
+                {
+                    key.SetValue("Password", txtPassword.Text);
+                    key.SetValue("UsePassword", 1);
+                }
+                else
+                {
+                    key.DeleteValue("Password", false);
+                    key.SetValue("UsePassword", 0);
+                }
+
+                key.SetValue("IsWeeklyActive", isActive ? 1 : 0);
+                key.Close();
+            }
+            catch { }
+        }
+
+        private void LoadSettings()
+        {
+            try
+            {
+                RegistryKey key = Registry.CurrentUser.OpenSubKey(REG_PATH);
+                if (key != null)
+                {
+                    if (key.GetValue("WeeklyHour") != null) numHoursWeekly.Value = (int)key.GetValue("WeeklyHour");
+                    if (key.GetValue("WeeklyMinute") != null) numMinutesWeekly.Value = (int)key.GetValue("WeeklyMinute");
+
+                    if (key.GetValue("UsePassword") != null) chkPassword.Checked = (int)key.GetValue("UsePassword") == 1;
+                    if (key.GetValue("Password") != null) txtPassword.Text = (string)key.GetValue("Password");
+
+                    string daysStr = key.GetValue("WeeklyDays") as string;
+                    if (!string.IsNullOrEmpty(daysStr))
+                    {
+                        if (chkListDays.Items.Count == 0) UpdateLanguage();
+
+                        string[] indices = daysStr.Split(',');
+                        foreach (string idx in indices)
+                        {
+                            if (int.TryParse(idx, out int i) && i >= 0 && i < chkListDays.Items.Count)
+                            {
+                                chkListDays.SetItemChecked(i, true);
+                            }
+                        }
+                    }
+
+                    // AUTO RESUME
+                    int isActive = (int)key.GetValue("IsWeeklyActive", 0);
+                    if (isActive == 1)
+                    {
+                        tabControl.SelectedTab = tabWeekly;
+                        DateTime? nextRun = GetNextWeeklyTime((int)numHoursWeekly.Value, (int)numMinutesWeekly.Value);
+                        if (nextRun.HasValue)
+                        {
+                            _targetTime = nextRun.Value;
+                            StartSystem(4, (_isEnglish ? "Next run: " : "Lần chạy tới: ") + _targetTime.ToString("dd/MM HH:mm"));
+                        }
+                    }
+                    key.Close();
+                }
+            }
+            catch { }
+        }
+
+        private void MakeCyclic(NumericUpDown nud, int max)
+        {
+            nud.Minimum = -1;
+            nud.Maximum = max + 1;
+            nud.ValueChanged += (s, e) =>
+            {
+                if (nud.Value >= max + 1) nud.Value = 0;
+                if (nud.Value <= -1) nud.Value = max;
+            };
+        }
+
+        private void CheckStartupState()
+        {
+            try
+            {
+                RegistryKey rk = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+                if (rk.GetValue("GOOT") != null) chkStartWithWindows.Checked = true;
+            }
+            catch { }
+        }
+
+        private void SetStartup(bool enable)
+        {
+            try
+            {
+                RegistryKey rk = Registry.CurrentUser.OpenSubKey("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run", true);
+                if (enable) rk.SetValue("GOOT", Application.ExecutablePath);
+                else rk.DeleteValue("GOOT", false);
+            }
+            catch (Exception ex) { MessageBox.Show("Error: " + ex.Message); }
+        }
+
+        private DateTime? GetNextWeeklyTime(int hour, int minute)
+        {
+            DateTime now = DateTime.Now;
+            DateTime checkDate = new DateTime(now.Year, now.Month, now.Day, hour, minute, 0);
+
+            for (int i = 0; i < 8; i++)
+            {
+                if (i == 0 && checkDate < now)
+                {
+                    checkDate = checkDate.AddDays(1);
+                    continue;
+                }
+
+                int dayIndex = (int)checkDate.DayOfWeek;
+                if (chkListDays.GetItemChecked(dayIndex))
+                    return checkDate;
+
+                checkDate = checkDate.AddDays(1);
+            }
+            return null;
+        }
+
         private void UpdateSecurityButtonText()
         {
-            if (_isEnglish)
-                btnToggleSecurity.Text = grpSecurity.Visible ? "Hide Security Options" : "Show Security Options";
-            else
-                btnToggleSecurity.Text = grpSecurity.Visible ? "Ẩn tùy chọn bảo mật" : "Hiện tùy chọn bảo mật";
+            if (_isEnglish) btnToggleSecurity.Text = grpSecurity.Visible ? "Hide Security Options" : "Show Security Options";
+            else btnToggleSecurity.Text = grpSecurity.Visible ? "Ẩn tùy chọn bảo mật" : "Hiện tùy chọn bảo mật";
         }
 
         private void UpdateLanguage()
         {
-            string ver = Application.ProductVersion.Substring(0, Math.Min(15, Application.ProductVersion.Length));
+            string ver = "1.3.2";
+
+            bool[] checkedDays = new bool[7];
+            if (chkListDays.Items.Count > 0)
+                for (int i = 0; i < 7; i++) checkedDays[i] = chkListDays.GetItemChecked(i);
+
+            chkListDays.Items.Clear();
+
             if (_isEnglish)
             {
                 try { btnLangFlag.BackgroundImage = Properties.Resources.flag_us; } catch { btnLangFlag.Text = "US"; }
-
                 UpdateSecurityButtonText();
 
-                tabCountdown.Text = "Countdown"; tabTime.Text = "Schedule"; tabProcess.Text = "Auto Close"; tabAbout.Text = "About";
+                tabCountdown.Text = "Countdown"; tabTime.Text = "Schedule"; tabProcess.Text = "Auto Close";
+                tabWeekly.Text = "Weekly"; tabAbout.Text = "About";
+
                 btnStartCountdown.Text = "START"; btnStartTime.Text = "SET"; btnStartProcess.Text = "MONITOR";
+                btnStartWeekly.Text = "SET SCHEDULE";
 
                 lblProcessHint.Text = "Enter process name (e.g., chrome, notepad)";
-
                 lblAppInfo.Text = $"GOOT - Get Off On Time\nVersion {ver}";
+                lnkRepo.Text = "Homepage: GitHub Repo";
                 lnkAuthor.Text = "Author: ToanBB.Pro";
                 grpSecurity.Text = "Security Control"; chkPassword.Text = "Require Password";
                 btnCancel.Text = _isRunning ? "STOP NOW" : "CANCEL";
+                chkStartWithWindows.Text = "Start with Windows";
+                chkSelectAllDays.Text = "Select All";
+
+                string[] daysEn = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+                chkListDays.Items.AddRange(daysEn);
                 if (!_isRunning) lblStatusLeft.Text = "Ready";
             }
             else
             {
                 try { btnLangFlag.BackgroundImage = Properties.Resources.flag_vn; } catch { btnLangFlag.Text = "VN"; }
-
                 UpdateSecurityButtonText();
 
-                tabCountdown.Text = "Đếm ngược"; tabTime.Text = "Chọn giờ"; tabProcess.Text = "Tắt khi mở app"; tabAbout.Text = "Giới thiệu";
+                tabCountdown.Text = "Đếm ngược"; tabTime.Text = "Chọn giờ"; tabProcess.Text = "Tắt khi mở app";
+                tabWeekly.Text = "Lịch tuần"; tabAbout.Text = "Giới thiệu";
+
                 btnStartCountdown.Text = "BẮT ĐẦU"; btnStartTime.Text = "HẸN GIỜ"; btnStartProcess.Text = "THEO DÕI";
+                btnStartWeekly.Text = "ĐẶT LỊCH TẮT";
 
                 lblProcessHint.Text = "Tên app cần theo dõi (ví dụ: chrome, notepad)";
-
                 lblAppInfo.Text = $"GOOT - Get Off On Time\nPhiên bản {ver}";
+                lnkRepo.Text = "Trang chủ: GitHub Repo";
                 lnkAuthor.Text = "Tác giả: ToanBB.Pro";
                 grpSecurity.Text = "Bảo mật"; chkPassword.Text = "Dùng mật khẩu";
                 btnCancel.Text = _isRunning ? "DỪNG NGAY" : "HỦY HẸN GIỜ";
+                chkStartWithWindows.Text = "Chạy cùng Windows";
+                chkSelectAllDays.Text = "Chọn tất cả";
+
+                string[] daysVn = { "Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy" };
+                chkListDays.Items.AddRange(daysVn);
                 if (!_isRunning) lblStatusLeft.Text = "Sẵn sàng";
             }
-        }
 
-        private string AppVersionShort
-        {
-            get
-            {
-                try
-                {
-                    string rawVersion = Application.ProductVersion.Split('+')[0];
-                    Version v = new Version(rawVersion);
-                    return $"{v.Major}.{v.Minor}";
-                }
-                catch { return "1.1"; }
-            }
+            for (int i = 0; i < 7; i++) chkListDays.SetItemChecked(i, checkedDays[i]);
         }
 
         protected override void OnResize(EventArgs e)
@@ -294,14 +485,41 @@ namespace GOOT
             if (this.WindowState == FormWindowState.Minimized) { this.Hide(); notifyIcon.Visible = true; }
         }
 
+        // --- HÀM KHÓA/MỞ CONTROL TRONG TAB ---
+        private void ToggleCurrentTabControls(TabPage page, bool enable)
+        {
+            foreach (Control c in page.Controls)
+            {
+                c.Enabled = enable;
+            }
+        }
+
         private void StartSystem(int mode, string msg)
         {
             _mode = mode; _isRunning = true;
             lblStatusLeft.Text = msg; lblStatusLeft.ForeColor = Color.Red;
-            tabControl.Enabled = false; mainTimer.Start();
+
+            // Khóa Input bảo mật
+            chkPassword.Enabled = false;
+            txtPassword.Enabled = false;
+
+            // Khóa Input trong Tab đang chạy
+            if (mode == 1) ToggleCurrentTabControls(tabCountdown, false);
+            if (mode == 2) ToggleCurrentTabControls(tabTime, false);
+            if (mode == 3) ToggleCurrentTabControls(tabProcess, false);
+            if (mode == 4)
+            {
+                ToggleCurrentTabControls(tabWeekly, false);
+
+                // ĐỒNG BỘ STARTUP: Nếu chạy Weekly -> Bắt buộc bật Startup và khóa lại
+                chkStartWithWindows.Checked = true;
+                SetStartup(true);
+                chkStartWithWindows.Enabled = false;
+            }
+
+            mainTimer.Start();
             UpdateLanguage();
 
-            // Tự động mở rộng form và hiện phần bảo mật để người dùng thấy nút Hủy
             if (!grpSecurity.Visible)
             {
                 grpSecurity.Visible = true;
@@ -313,9 +531,28 @@ namespace GOOT
         private void BtnCancel_Click(object sender, EventArgs e)
         {
             if (!_isRunning) return;
+
             if (chkPassword.Checked && Prompt.ShowDialog("Pass:", "Verify") != txtPassword.Text) return;
+
             mainTimer.Stop(); _isRunning = false;
-            tabControl.Enabled = true; lblStatusLeft.ForeColor = Color.Black;
+
+            // Mở lại Input bảo mật
+            chkPassword.Enabled = true;
+            txtPassword.Enabled = true;
+
+            // Mở lại các Control trong Tab
+            if (_mode == 1) ToggleCurrentTabControls(tabCountdown, true);
+            if (_mode == 2) ToggleCurrentTabControls(tabTime, true);
+            if (_mode == 3) ToggleCurrentTabControls(tabProcess, true);
+            if (_mode == 4)
+            {
+                ToggleCurrentTabControls(tabWeekly, true);
+                // Mở lại ô Startup để user tùy chỉnh
+                chkStartWithWindows.Enabled = true;
+                SaveSettings(false); // Xóa active state
+            }
+
+            lblStatusLeft.ForeColor = Color.Black;
             UpdateLanguage();
         }
 
@@ -328,8 +565,18 @@ namespace GOOT
             else
             {
                 TimeSpan remain = _targetTime - DateTime.Now;
-                if (remain.TotalSeconds <= 0) ShutdownNow();
-                else lblStatusLeft.Text = (_isEnglish ? "Remaining: " : "Còn lại: ") + remain.ToString(@"hh\:mm\:ss");
+                if (remain.TotalSeconds <= 0)
+                {
+                    ShutdownNow();
+                }
+                else
+                {
+                    string prefix = _isEnglish ? "Remaining: " : "Còn lại: ";
+                    if (_mode == 4 && remain.TotalHours > 24)
+                        lblStatusLeft.Text = prefix + remain.ToString(@"dd\.hh\:mm\:ss");
+                    else
+                        lblStatusLeft.Text = prefix + remain.ToString(@"hh\:mm\:ss");
+                }
             }
         }
 
