@@ -1,8 +1,15 @@
+<div align="center">
+
 # GOOT - Get Off On Time
-Windows app to auto shutdown PC in time.
+
+[Vietnamese / Tiếng Việt](https://github.com/toanbbpro/GOOT/blob/master/README.md)
+<br/>Windows app to auto shutdown PC in time.
+
+<br/>
 
 <img width="486" height="493" alt="image" src="https://github.com/user-attachments/assets/567aebb2-7fcb-4a8c-b6e6-7f265ad6cd94" />
 
+</div>
 
 Feature:
 - Auto shutdown PC on time count
